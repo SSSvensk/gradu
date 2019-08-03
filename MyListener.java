@@ -156,6 +156,13 @@ public class MyListener extends xpathBaseListener {
         if (this.isNode && !this.insidePredicate) {
             cypherQuery.append("()");
         }
+        StringBuilder sb = new StringBuilder();
+        sb.append(ctx.getChild(1));
+        System.out.println(sb);
+        
+        if (sb.toString().equals("//")) {
+        	System.out.println("momomo");
+        }
     }
 
     @Override
