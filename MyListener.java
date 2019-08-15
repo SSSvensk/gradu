@@ -22,6 +22,11 @@ public class MyListener extends xpathBaseListener {
     private Object predicateValue;
     private boolean stepClosed;
     private boolean firstPredicateItem;
+    
+    private String functionName;
+    private boolean insideFunction;
+    
+    private boolean alreadyCompared = false;
 
     private boolean visitAbbStep = false;
     private boolean visitNameTest = false;
@@ -100,12 +105,27 @@ public class MyListener extends xpathBaseListener {
             sb.append(this.lastElement);
 
             if (sb.toString().equals("*")) {
-                cypherQuery.append(" RETURN (" + this.lastRandom + ")");
-            } else {
+            	if (this.insideFunction) {
+            		cypherQuery.append(" RETURN " + this.functionName + "(" + this.lastRandom + ")");
+            	} else {
+            		cypherQuery.append(" RETURN (" + this.lastRandom + ")");
+            	}
+                
+            }  else {
                 if (this.returnAttribute != null) {
-                    cypherQuery.append(" RETURN (" + this.lastElement + "." + this.returnAttribute + ")");
+                	if (this.insideFunction) {
+                		cypherQuery.append(" RETURN " + this.functionName + "(" + this.lastElement + "." + this.returnAttribute + ")");
+                	} else {
+                		cypherQuery.append(" RETURN (" + this.lastElement + "." + this.returnAttribute + ")");
+                	}
+                    
                 } else {
-                    cypherQuery.append(" RETURN (" + this.lastElement + ")");
+                	if (this.insideFunction) {
+                		cypherQuery.append(" RETURN " + this.functionName + "(" + this.lastElement + ")");
+                	} else {
+                		cypherQuery.append(" RETURN (" + this.lastElement + ")");
+                	}
+                    
                 }
             }
             
@@ -126,6 +146,25 @@ public class MyListener extends xpathBaseListener {
     public void enterAbsoluteLocationPathNoroot(xpathParser.AbsoluteLocationPathNorootContext ctx) {
         this.firstNode = true;
         System.out.println(ctx.getChildCount());
+    }
+    
+    @Override
+    public void enterFunctionCall(xpathParser.FunctionCallContext ctx) {
+    	this.insideFunction = true;
+    }
+    
+    @Override
+    public void exitFunctionCall(xpathParser.FunctionCallContext ctx) {
+    	this.insideFunction = false;
+    }
+    
+    @Override
+    public void exitFunctionName(xpathParser.FunctionNameContext ctx) {
+    	if (ctx.getChildCount() > 0) {
+    		StringBuilder sb = new StringBuilder();
+    		sb.append(ctx.getChild(0));
+    		this.functionName = sb.toString();
+    	}
     }
 
     @Override
@@ -186,29 +225,32 @@ public class MyListener extends xpathBaseListener {
     		//Jos polku on predikaatin sisällä liitetään polku WHERE-osaan.
             if (this.insidePredicate) {
             	
-            	/*Jos where-osiossa on jo tavaraa, yhdistetään uusi polku AND-operaattorilla.
-            	if (wherePart.length() > 0) {
-            		wherePart.append(" AND ");
-            	}*/
-            	
             	//Aloitetaan WHERE-osa antamalla ensimmäiseksi solmuksi predikaattiin sidottu elementti
             	this.wherePart.append("(" + this.conditionAppliesTo + ")");
             	thisIsNode = false;
             	
+            	//Käydään läpi predikaatin osat
             	for (int i = 0; i < this.predicateParts.size(); i++) {
             		
-            		//Jos kyseessä on ensimmäinen askel, on oletuksen mukaan sen oltava solmu
+            		//Jos kyseessä on ensimmäinen askel...
             		if (i == 0) {
             			
             			//Jos predikaatin aloittaa villi kortti, lisätään nuoli
             			if (this.predicateParts.get(i).toString().equals("*")) {
             				this.wherePart.append("-->");
+            				if (i == this.predicateParts.size() - 1) {
+            					this.wherePart.append("()");
+            				}
+            				
             				lastWasWildCard = true;
             				thisIsNode = !thisIsNode;
             			
             			//Jos taas takaisinmenoaskel, lisätään nuoli toiseen suuntaan
             			} else if (this.predicateParts.get(i).toString().equals("..")) {
             				this.wherePart.append("<--");
+            				if (i == this.predicateParts.size() - 1) {
+            					this.wherePart.append("()");
+            				}
             				lastWasWildCard = true;
             				thisIsNode = !thisIsNode;
             				
@@ -222,6 +264,9 @@ public class MyListener extends xpathBaseListener {
             				//Muussa tapauksessa oletetaan elementin olevan kaari.
                 			this.wherePart.append("-");
                 		    this.wherePart.append("[" + this.predicateParts.get(i) + "]");
+                		    if (i == this.predicateParts.size() - 1) {
+                		    	this.wherePart.append("->()");
+                		    }
                 			thisIsNode = true;
                 				
                 			//(//) = -[*]->
@@ -330,8 +375,15 @@ public class MyListener extends xpathBaseListener {
             			if (this.matchParts.get(i).toString().equals("*")) {
             				if (!lastWasWildCard) {
             					if (!thisIsNode) {
-                					this.matchPart.append("-->");
-                					this.isNode = true;
+            						if (i == this.matchParts.size() - 1) {
+            							this.matchPart.append("-[random" + this.randomIndex + "]");
+            							this.matchPart.append("->()");
+            							this.lastRandom = "random" + this.randomIndex;
+            						} else {
+            							this.matchPart.append("-->");
+                    					this.isNode = true;
+            						}
+                					
                 				} else {
                 					if (i == this.matchParts.size() - 1) {
                 						this.matchPart.append("->(random" + this.randomIndex + ")");
@@ -378,13 +430,61 @@ public class MyListener extends xpathBaseListener {
             				lastWasWildCard = true;
             				
             			} else if (this.matchParts.get(i).toString().equals("..")) {
-            				if (!thisIsNode) {
-            					this.matchPart.append("<--");
+            				if (!lastWasWildCard) {
+            					if (!thisIsNode) {
+            						if (i == this.matchParts.size() - 1) {
+            							this.matchPart.append("<-[random" + this.randomIndex + "]");
+            							this.matchPart.append("-()");
+            							this.lastRandom = "random" + this.randomIndex;
+            						} else {
+            							this.matchPart.append("<--");
+                    					this.isNode = true;
+            						}
+                					
+                				} else {
+                					if (i == this.matchParts.size() - 1) {
+                						this.matchPart.append("<-(random" + this.randomIndex + ")");
+                						this.lastRandom = "random" + this.randomIndex;
+                						this.randomIndex++;
+                						this.isNode = false;
+                						
+                					} else {
+                						this.matchPart.append("()");
+                						this.isNode = false;
+                					}
+                					
+                				}
             				} else {
-            					this.matchPart.append("()");
+            					if (!this.isNode) {
+            						if (i == this.matchParts.size() - 1) {
+                						this.matchPart.append("<-[random" + this.randomIndex + "]");
+                						this.matchPart.append("-()");
+                						this.lastRandom = "random" + this.randomIndex;
+                						this.randomIndex++;
+                						this.isNode = false;
+                						
+                					} else {
+                						this.matchPart.append("<--");
+                						this.isNode = true;
+                					}
+                					
+            					} else {
+            						if (i == this.matchParts.size() - 1) {
+                						this.matchPart.append("(random" + this.randomIndex + ")");
+                						this.lastRandom = "random" + this.randomIndex;
+                						this.randomIndex++;
+                						this.isNode = false;
+                						
+                					} else {
+                						this.matchPart.append("()");
+                						this.isNode = false;
+                					}
+                					
+            					}
             				}
+            				
+            				
             				lastWasWildCard = true;
-            				thisIsNode = !thisIsNode;
             				
             			//Muussa tapauksessa edetään "normaalisti"
             			} else {
@@ -453,7 +553,7 @@ public class MyListener extends xpathBaseListener {
     @Override
     public void exitEqualityExpr(xpathParser.EqualityExprContext ctx) {
         //Jos kyseessä on attribuutti, lisätään operaattori ja attribuutin arvo.
-        if (this.attribute && this.insidePredicate) {
+        if (this.attribute && this.insidePredicate && !this.alreadyCompared) {
             StringBuilder eq = new StringBuilder();
             eq.append(ctx.getChild(1));
             String equalOrInEqual = eq.toString();
@@ -472,17 +572,19 @@ public class MyListener extends xpathBaseListener {
     @Override
     public void exitRelationalExpr(xpathParser.RelationalExprContext ctx) {
         //Jos kyseessä on attribuutti, lisätään operaattori ja attribuutin arvo.
-        if (this.attribute) {
+    	if (this.attribute && this.insidePredicate) {
             StringBuilder eq = new StringBuilder();
             eq.append(ctx.getChild(1));
             String equalOrInEqual = eq.toString();
             if (equalOrInEqual.equals(">")) {
-                //cypherQuery.append(">" + this.predicateValue);
-                this.andSteps.set(this.andSteps.size()-1, this.andSteps.get(this.andSteps.size()-1) + " > " + this.predicateValue);
+                this.andSteps.add(this.conditionAppliesTo + "." + this.lastAttribute + " > " + this.predicateValue);
+                this.alreadyCompared = true;
             } else if (equalOrInEqual.equals("<")) {
-                //cypherQuery.append("<" + this.predicateValue);
-                this.andSteps.set(this.andSteps.size()-1, this.andSteps.get(this.andSteps.size()-1) + " < " + this.predicateValue);
+            	this.andSteps.add(this.conditionAppliesTo + "." + this.lastAttribute + " < " + this.predicateValue);
+            	this.alreadyCompared = true;
             }
+        } else {
+        	
         }
     }
 
@@ -588,6 +690,7 @@ public class MyListener extends xpathBaseListener {
     		this.insidePredicate = false;
     	}
     	this.lastElement = this.conditionAppliesTo;
+    	this.alreadyCompared = false;
         this.stepClosed = false;
     }
 
@@ -599,5 +702,7 @@ public class MyListener extends xpathBaseListener {
     	} else {
     		this.matchParts.add("..");
     	}
+    	
+    	this.lastElement = "random" + this.randomIndex;
     }
 }
