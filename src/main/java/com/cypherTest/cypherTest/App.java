@@ -51,7 +51,7 @@ public class App
 
             String cypQ = mylistener.wholeQuery.toString();
             System.out.println(cypQ);
-            
+            /*
     		Driver driver = GraphDatabase.driver( "bolt://localhost:7687", AuthTokens.basic( "neo4j", "testi" ) );
         	Session session = driver.session();
         	StatementResult stre = session.run(cypQ);
@@ -62,11 +62,11 @@ public class App
         		String json = gson.toJson(gson.toJson(lr.get(i).asMap()));
         		System.out.println(json);
         	}
-        	
-        	System.out.println(cypQ);
+        	  System.out.println(cypQ);
         	System.out.println(lr.size());
         	
         	driver.close();
+        	*/
     	} catch (Exception e) {
     		System.out.println("virhe!");
     		System.out.println(e);
