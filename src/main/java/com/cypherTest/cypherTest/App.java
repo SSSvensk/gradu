@@ -31,6 +31,8 @@ public class App
     	try {
     		String inputCmd = null;
             if ( args.length>0 ) inputCmd = args[0];
+            System.out.println("XPath query");
+            System.out.println(inputCmd);
             // create a CharStream that reads from standard input
             ANTLRInputStream input = new ANTLRInputStream(inputCmd);
 
@@ -47,10 +49,9 @@ public class App
 
             parser.addParseListener(mylistener);
             ParseTree tree = parser.main();    // begin parsing at rule main
-            //System.out.println(tree.toStringTree(parser)); // print LISP-style tree
-
-            String cypQ = mylistener.wholeQuery.toString();
-            System.out.println(cypQ);
+            
+            System.out.println();
+            
             /*
     		Driver driver = GraphDatabase.driver( "bolt://localhost:7687", AuthTokens.basic( "neo4j", "testi" ) );
         	Session session = driver.session();
@@ -67,6 +68,8 @@ public class App
         	
         	driver.close();
         	*/
+    	} catch (IllegalArgumentException e) {
+    		System.out.println(e);
     	} catch (Exception e) {
     		System.out.println("virhe!");
     		System.out.println(e);

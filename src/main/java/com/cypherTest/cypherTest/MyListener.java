@@ -5,58 +5,56 @@ import java.util.LinkedList;
 import java.util.Queue;
 import java.util.Stack;
 
+import javax.swing.plaf.basic.BasicInternalFrameTitlePane.SystemMenuBar;
+
 public class MyListener extends xpathBaseListener {
 
-	private String query;
-	private Object lastElement;
-	private Object conditionAppliesTo;
-    private Object returnAttribute;
+	private StringBuilder query = new StringBuilder();
+	private Object appliesTo;
     private Object lastAttribute;
+    private boolean lastNodeInPath;
+    private boolean endPathStep;
 	private boolean attribute;
-    private boolean insidePredicate;
+	private String attributeName;
+	private boolean attributeOnly = false;
+    private boolean insidePredicate = false;
+    private boolean insidePredicateFunction = false;
     private Object predicateValue;
+    private boolean isNode = true;
+    private boolean addPath = false;
+    private int pathIndex = 0;
+    
+    private boolean firstStep = true;
     
     private String functionName;
-    private boolean insideFunction;
+    private Stack<String> functionNames = new Stack<String>();
+    private Stack<Boolean> isNodeStack = new Stack<Boolean>();
+    private Stack<Boolean> isLastNodeInPathStack = new Stack<Boolean>();
+    private Stack<Boolean> hasEdges = new Stack<Boolean>();
     
-    private boolean alreadyCompared = false;
-
+    private String axis = "";
+    private String startEdge;
+    private String endEdge;
+    
+    public StringBuilder priorityQuery = new StringBuilder();
+    public Stack<StringBuilder> priorityQueries = new Stack<StringBuilder>();
+    private StringBuilder whereQuery = new StringBuilder();
+    private String returnValue;
+    private Stack<String> returnValues = new Stack<String>();
     public StringBuilder cypherQuery = new StringBuilder();
     
-    public StringBuilder wholeQuery = new StringBuilder();
-    private ArrayList wholeQueryParts = new ArrayList();
     
-    private ArrayList predicatePaths = new ArrayList();
-    private ArrayList matchQueries = new ArrayList();
-
-    private ArrayList andSteps = new ArrayList(); 
-    private StringBuilder andQuery = new StringBuilder();
-    private ArrayList andParts = new ArrayList();
+    private Stack<String> paths = new Stack<String>();
+    private Stack<String> appliesToStack = new Stack<String>(); 
     
-    private ArrayList matchParts = new ArrayList();
-    private ArrayList predicateParts = new ArrayList();
-    private ArrayList whereParts = new ArrayList();
-    
-    private StringBuilder matchPart = new StringBuilder();
-    private StringBuilder wherePart = new StringBuilder();
-    
-    private Stack<ArrayList> paths = new Stack<ArrayList>();
-    private Stack<String> predicateElements = new Stack<String>(); 
-
-    private ArrayList orSteps = new ArrayList();
-    private StringBuilder orQuery = new StringBuilder();
-    private StringBuilder whereQuery = new StringBuilder();
-
     private int aliasIndex = 0;
-    private int randomIndex = 0;
-    private String lastRandom = "";
 
 	public MyListener() {
-        this.query = "";
+        this.query = new StringBuilder();
     }
 
     public void setQuery(Object s) {
-    	this.query = this.query + s;
+    	this.query.append(s);
     }
 
     public Object getQuery() {
@@ -65,21 +63,13 @@ public class MyListener extends xpathBaseListener {
 
     @Override
     public void exitMain(xpathParser.MainContext ctx) {
-    	
+    	System.out.println("Cypher query");
+    	System.out.println(this.query);
     }
     
     @Override
     public void exitUnaryExprNoRoot(xpathParser.UnaryExprNoRootContext ctx) {
-    	if (!this.insidePredicate) {
-    		for (int i = 0; i < this.wholeQueryParts.size(); i++) {
-    			if (i > 0) {
-    				this.wholeQuery.append(" UNION ");
-    			}
-    			this.wholeQuery.append(this.wholeQueryParts.get(i));
-    		}
-    		
-    		this.wholeQueryParts.clear();
-    	}
+    	
     }
     
     @Override
@@ -89,61 +79,27 @@ public class MyListener extends xpathBaseListener {
     }
     
     @Override
+    public void exitPathExprNoRoot(xpathParser.PathExprNoRootContext ctx) {
+    	
+    }
+    
+    @Override
     public void exitLocationPath(xpathParser.LocationPathContext ctx) {
-    	
-    	//If we are no longer inside predicate, it means that we are exiting from the whole query
-    	
     	if (!this.insidePredicate) {
-    		cypherQuery.append("MATCH ");
-    		for (int i = this.matchQueries.size() - 1; i >= 0; i--) {
-    			if (i < this.matchQueries.size() - 1) {
-    				cypherQuery.append(", ");
-    			}
-    			cypherQuery.append(this.matchQueries.get(i));
-    		}
-
-        	if (wherePart.length() > 0) {
-        		cypherQuery.append(" WHERE " + wherePart);
+    		if (this.query.length() > 0) {
+        		this.query.append(" UNION ");
         	}
-            StringBuilder sb = new StringBuilder();
-            sb.append(this.lastElement);
-
-            if (sb.toString().equals("*")) {
-            	if (this.insideFunction) {
-            		cypherQuery.append(" RETURN " + this.functionName + "(" + this.lastRandom + ")");
-            	} else {
-            		
-            		cypherQuery.append(" RETURN (" + this.lastRandom + ")");
-            	}
-                
-            }  else {
-                if (this.returnAttribute != null) {
-                	if (this.insideFunction) {
-                		cypherQuery.append(" RETURN " + this.functionName + "(" + this.lastElement + "." + this.returnAttribute + ")");
-                	} else {
-                		cypherQuery.append(" RETURN (" + this.lastElement + "." + this.returnAttribute + ")");
-                	}
-                    
-                } else {
-                	if (this.insideFunction) {
-                		cypherQuery.append(" RETURN " + this.functionName + "(" + this.lastElement + ")");
-                	} else {
-                		cypherQuery.append(" RETURN (" + this.lastElement + ")");
-                	}
-                    
-                }
-            }
-            
-            this.wholeQueryParts.add(this.cypherQuery);
-            this.cypherQuery = new StringBuilder();
-            this.lastElement = new Object();
-            this.returnAttribute = null;
-            this.lastRandom = "";
-            this.wherePart = new StringBuilder();
-            this.matchPart = new StringBuilder();
-            this.aliasIndex = 0;
-            this.randomIndex = 0;
+        	this.query.append("MATCH " + this.priorityQuery);
+        	if (this.whereQuery.length() > 0) {
+        		this.query.append(" WHERE " + this.whereQuery);
+        	}
+        	this.query.append(" RETURN " + this.returnValue);
+        	this.returnValue = "";
+        	this.priorityQuery = new StringBuilder();
+        	this.whereQuery = new StringBuilder();
     	}
+    	
+    	//
     	
     }
 
@@ -153,12 +109,18 @@ public class MyListener extends xpathBaseListener {
     
     @Override
     public void enterFunctionCall(xpathParser.FunctionCallContext ctx) {
-    	this.insideFunction = true;
     }
     
     @Override
     public void exitFunctionCall(xpathParser.FunctionCallContext ctx) {
-    	this.insideFunction = false;
+    	if (this.insidePredicate) {
+    		this.whereQuery.append(this.returnValue + " " + this.functionNames.pop() + " " + this.predicateValue);
+    		this.insidePredicateFunction = false;
+    	} else {
+    		this.returnValue = this.functionName + "(" + this.returnValue + ")";
+        	this.functionNames.pop();
+    	}
+    	
     }
     
     @Override
@@ -166,7 +128,43 @@ public class MyListener extends xpathBaseListener {
     	if (ctx.getChildCount() > 0) {
     		StringBuilder sb = new StringBuilder();
     		sb.append(ctx.getChild(0));
-    		this.functionName = sb.toString();
+    		String cypherFunctionName = "";
+    		if (this.insidePredicate) {
+    			if (sb.toString().equals("contains")) {
+        			cypherFunctionName = "CONTAINS";
+        		} else if (sb.toString().equals("starts-with")) {
+        			cypherFunctionName = "STARTS WITH";
+        		} else if (sb.toString().equals("ends-with")) {
+        			cypherFunctionName = "ENDS WITH";
+        		} else {
+        			throw new IllegalArgumentException("Function name inside predicate invalid!");
+        		}
+    			this.insidePredicateFunction = true;
+    		} else {
+    			if (sb.toString().equals("avg")) {
+    			    cypherFunctionName = "avg";
+    		    } else if (sb.toString().equals("min")) {
+    			    cypherFunctionName = "min";
+    		    } else if (sb.toString().equals("max")) {
+    		 	    cypherFunctionName = "max";
+    		    } else if (sb.toString().equals("sum")) {
+    			    cypherFunctionName = "sum";
+    		    } else if (sb.toString().equals("count")) {
+    			    cypherFunctionName = "count";
+    		    } else if (sb.toString().equals("ceil")) {
+    			    cypherFunctionName = "ceil";
+    		    } else if (sb.toString().equals("floor")) {
+    			    cypherFunctionName = "floor";
+    		    } else if (sb.toString().equals("round")) {
+    			    cypherFunctionName = "round";
+    		    } else if (sb.toString().equals("not")) {
+    			    cypherFunctionName = "not";
+    		    } else {
+    			   throw new IllegalArgumentException("Function name is invalid!");
+    		    }
+    		}
+    		this.functionName = cypherFunctionName;
+    		this.functionNames.push(cypherFunctionName);
     	}
     }
 
@@ -174,381 +172,101 @@ public class MyListener extends xpathBaseListener {
     public void exitAbsoluteLocationPathNoroot(xpathParser.AbsoluteLocationPathNorootContext ctx) {
         if (this.insidePredicate) {
         	
-        	this.predicateParts.add("//");
         }
     }
 
     @Override
     public void exitNCName(xpathParser.NCNameContext ctx) {
+    	StringBuilder sb = new StringBuilder();
+    	String ncName = sb.append(ctx.getChild(0)).toString();
+    	
+    	if (this.firstStep && this.axis.equals("attribute")) {
+    		if (this.addPath) {
+    			this.returnValue = ncName;
+    		} else if (this.insidePredicate) {
+    			this.returnValue = this.appliesTo + "." + ncName;
+    		} else {
 
-        if (this.insidePredicate) {
-        	if (this.attribute) {
-        		this.lastAttribute = ctx.getChild(0);
-        	} else {
-        		String s = "alias" + this.aliasIndex + ": " + ctx.getChild(0);
-        		System.out.println("added: " + s);
-        		this.predicateParts.add(s);
-        		this.lastElement = "alias" + this.aliasIndex;
-        	}
-        } else {
-        	//Tarkastetaanko onko kyseinen elementti tarkoitettu attribuutiksi.
-        	if (this.attribute) {
-        		
-        		//Jos on attribuutti, se asetetaan muuttujaan, joka myöhemmin palautetaan RETURN-yhteydessä.
-        		this.returnAttribute = ctx.getChild(0);
-        		this.attribute = false;
-        	} else {
-            	this.matchParts.add("alias" + this.aliasIndex + ": " + ctx.getChild(0));
-            	
-            	//Siirretty if-elsen ulkopuolelta
-            	this.lastElement = "alias" + this.aliasIndex;
-        	}
-        }
-        
-        this.aliasIndex++;
-        System.out.println("predikaatin osat lisäyksen jälkeen:");
-        System.out.println(this.predicateParts);
-
-        
+    			this.priorityQuery.append("(a"+ this.aliasIndex +")");
+        		this.returnValue = "a" + this.aliasIndex + "." + ncName;
+    		}
+    		this.aliasIndex++;
+    		this.attributeOnly = true;
+    		this.attribute = true;
+    		this.attributeName = ncName;
+    	} else if(this.axis.equals("attribute")) {
+    		this.attribute = true;
+    		this.attributeName = ncName;
+    		if (this.appliesToStack.size() > 0) {
+    			this.returnValue = this.appliesTo + "." + ncName;
+    		} else {
+    			this.returnValue = this.returnValue + "." + ncName;
+    		}
+    		
+    	} else if (this.isNode) {
+    		this.priorityQuery.append("(a" + this.aliasIndex + ":" + ncName + ")");
+    		this.returnValue = "a" + this.aliasIndex;
+    		this.aliasIndex++;
+    	} else if (!this.isNode) {
+    		if (this.priorityQueries.size() > 0 && this.firstStep) {
+    			System.out.println(this.addPath);
+    			if (this.addPath) {
+    				this.priorityQuery.append("(" + this.appliesToStack.peek() + ")");
+    			} else {
+    				System.out.println("kkk");
+    				this.priorityQuery.append(", (" + this.appliesToStack.peek() + ")");
+    			}
+    			
+    		}
+    		
+    		//If transitive axis, then ignore the alias name
+    		if (this.axis.equals("ancestor") || this.axis.equals("descendant") || this.axis.equals("ancestor-or-self") || this.axis.equals("descendant-or-self")) {
+    			this.priorityQuery.append(this.startEdge + ":" + ncName.toUpperCase() + "" + this.endEdge);
+    			
+    		//If parent or child, add alias name and the edge label.
+    		} else if (this.axis.equals("parent") || this.axis.equals("child")) {
+    			this.priorityQuery.append(this.startEdge + "a" + this.aliasIndex + ":" + ncName.toUpperCase() + "" + this.endEdge);
+    			
+    		//If no axis, this defaults to child
+    		} else {
+    			this.priorityQuery.append("-[a" + this.aliasIndex + ":" + ncName.toUpperCase() + "]->");
+    		}
+    		this.aliasIndex++;
+    		
+    	}
+    	this.firstStep = false;
     }
     
     @Override
     public void enterRelativeLocationPath(xpathParser.RelativeLocationPathContext ctx) {
     	
-    	
     }
 
     @Override
     public void exitRelativeLocationPath(xpathParser.RelativeLocationPathContext ctx) {
-    	
-    	//Koska Cypherin polku alkaa aina solmusta, asetetaan isNode-lippumuuttuja todeksi.
-    	boolean thisIsNode = true;
-    	boolean lastWasWildCard = false;
-    	System.out.println("predicates to be processed");
-    	System.out.println(this.predicateParts);
-    	
-    	//Jos attribuutti-lippu on true, 
-    	if (this.attribute) {
-    		//andQuery.append(this.conditionAppliesTo + "." + this.returnAttribute);
-    	} else {
-    		//Jos polku on predikaatin sisällä liitetään polku MATCH-osaan.
-    	    //TODO:
-    		//Liitetään polku MATCH osaan pilkulla erotettuna!
-            if (this.insidePredicate) {
-            	
-            	//Aloitetaan WHERE-osa antamalla ensimmäiseksi solmuksi predikaattiin sidottu elementti
-            	this.matchPart.append("(" + this.predicateElements.peek() + ")");
-            	thisIsNode = false;
-            	
-            	//Käydään läpi predikaatin osat
-            	for (int i = 0; i < this.predicateParts.size(); i++) {
-            		
-            		//Jos kyseessä on ensimmäinen askel...
-            		if (i == 0) {
-            			
-            			//Jos predikaatin aloittaa villi kortti, lisätään nuoli
-            			if (this.predicateParts.get(i).toString().equals("*")) {
-            				this.matchPart.append("-->");
-            				if (i == this.predicateParts.size() - 1) {
-            					this.matchPart.append("()");
-            				}
-            				
-            				lastWasWildCard = true;
-            				thisIsNode = !thisIsNode;
-            			
-            			//Jos taas takaisinmenoaskel, lisätään nuoli toiseen suuntaan
-            			} else if (this.predicateParts.get(i).toString().equals("..")) {
-            				this.matchPart.append("<--");
-            				if (i == this.predicateParts.size() - 1) {
-            					this.matchPart.append("()");
-            				}
-            				lastWasWildCard = true;
-            				thisIsNode = !thisIsNode;
-            				
-            			//Jos elementtiin on osunut kaksoiskauttaviivat
-            			} else if (this.predicateParts.get(i).toString().equals("//")) {
-            				this.matchPart.append("-[*]->");
-            				thisIsNode = true;
-            			} else {
-            				//Muussa tapauksessa oletetaan elementin olevan kaari.
-                			this.matchPart.append("-");
-                		    this.matchPart.append("[" + this.predicateParts.get(i) + "]");
-                		    if (i == this.predicateParts.size() - 1) {
-                		    	this.matchPart.append("->()");
-                		    }
-                			thisIsNode = true;
-                				
-                			//(//) = -[*]->
-                			lastWasWildCard = false;
-            			}
-            			
-            			thisIsNode = true;
-            			
-            		//Muussa tapauksessa, kun i > 0
-            		} else {
-            			
-            			//Tarkista edeltävän askelen tyyppi (/ vai //)
-            			StringBuilder sb = new StringBuilder();
-            			sb.append(ctx.getChild(i*2-1));
-            			
-            		    //TODO
-            			//Tarkista onko askel elementti vai villi kortti
-            			if (this.predicateParts.get(i).toString().equals("*")) {
-            				if (!thisIsNode) {
-            					this.matchPart.append("-->");
-            				} else {
-            					this.matchPart.append("()");
-            				}
-            				
-            				lastWasWildCard = true;
-            				thisIsNode = !thisIsNode;
-            				
-            			} else if (this.predicateParts.get(i).toString().equals("..")) {
-            				if (!thisIsNode) {
-            					this.matchPart.append("<--");
-            				} else {
-            					this.matchPart.append("()");
-            				}
-            				lastWasWildCard = true;
-            				thisIsNode = !thisIsNode;
-            				
-            			//Muussa tapauksessa edetään "normaalisti"
-            			} else {
-                			
-                			//(/) = Joko - tai -> riippuen onko kaari tai solmu
-                			if (sb.toString().equals("/")) {
-                				if (lastWasWildCard) {
-                					this.matchPart.append("(" + this.predicateParts.get(i) + ")");
-                					lastWasWildCard = !lastWasWildCard;
-                					thisIsNode = false;
-                				} else {
-                				    if (thisIsNode) {
-                					   this.matchPart.append("->");
-                					   this.matchPart.append("(" + this.predicateParts.get(i) + ")");
-                					   thisIsNode = false;
-                				    } else {
-                					   this.matchPart.append("-");
-                					   this.matchPart.append("[" + this.predicateParts.get(i) + "]");
-                					   thisIsNode = true;
-                				    }
-                				}
-                				
-                			//(//) = -[*]->
-                			} else if (sb.toString().equals("//")) {
-                				this.matchPart.append("-[*]->");
-                				this.matchPart.append("(" + this.predicateParts.get(i) + ")");
-                				thisIsNode = true;
-                			}
-                			lastWasWildCard = false;
-            			}
-            			
-            			
-            			
-            			
-            		}
-            		
-            	}
-            	this.matchQueries.add(this.matchPart);
-            	this.predicateParts = new ArrayList();
-            	this.matchPart = new StringBuilder();
-            	
-            //Jos ei, muodostetaan MATCH-kysely
-            } else {
-            	for (int i = 0; i < this.matchParts.size(); i++) {
-            		
-            		//Jos kyseessä on ensimmäinen askel, on oletuksen mukaan sen oltava solmu (tai attribuutti?)
-            		if (i == 0) {
-            			
-            			//Ensimmäinen askel voi olla villi kortti
-            			if (this.matchParts.get(0).equals("*")) {
-            				this.matchPart.append("(random" + this.randomIndex + ")");
-            				this.lastRandom = "random" + this.randomIndex;
-            				this.randomIndex++;
-            				lastWasWildCard = true;
-            				
-            			//Tai ihan normi solmu
-            			} else {
-            				this.matchPart.append("(" + this.matchParts.get(0) + ")");
-            			}
-            			thisIsNode = false;
-            			
-            		//Muussa tapauksessa..
-            		} else {
-            			
-            			//Tarkista edeltävän askelen tyyppi (/ vai //)
-            			StringBuilder sb = new StringBuilder();
-            			sb.append(ctx.getChild(i*2-1));
-            			
-            		    //TODO
-            			//Tarkista onko askel elementti vai villi kortti
-            			if (this.matchParts.get(i).toString().equals("*")) {
-            				if (!lastWasWildCard) {
-            					if (!thisIsNode) {
-            						if (i == this.matchParts.size() - 1) {
-            							this.matchPart.append("-[random" + this.randomIndex + "]");
-            							this.matchPart.append("->()");
-            							this.lastRandom = "random" + this.randomIndex;
-            							this.randomIndex++;
-            						} else {
-            							this.matchPart.append("-->");
-            							thisIsNode = true;
-            						}
-                					
-                				} else {
-                					if (i == this.matchParts.size() - 1) {
-                						this.matchPart.append("->(random" + this.randomIndex + ")");
-                						this.lastRandom = "random" + this.randomIndex;
-                						this.randomIndex++;
-                						thisIsNode = false;
-                						
-                					} else {
-                						this.matchPart.append("()");
-                						thisIsNode = false;
-                					}
-                					
-                				}
-            				} else {
-            					if (!thisIsNode) {
-            						if (i == this.matchParts.size() - 1) {
-                						this.matchPart.append("-[random" + this.randomIndex + "]");
-                						this.matchPart.append("->()");
-                						this.lastRandom = "random" + this.randomIndex;
-                						this.randomIndex++;
-                						thisIsNode = false;
-                						
-                					} else {
-                						this.matchPart.append("-->");
-                						thisIsNode = true;
-                					}
-                					
-            					} else {
-            						if (i == this.matchParts.size() - 1) {
-                						this.matchPart.append("(random" + this.randomIndex + ")");
-                						this.lastRandom = "random" + this.randomIndex;
-                						this.randomIndex++;
-                						thisIsNode = false;
-                						
-                					} else {
-                						this.matchPart.append("()");
-                						thisIsNode = false;
-                					}
-                					
-            					}
-            				}
-            				
-            				
-            				lastWasWildCard = true;
-            				
-            			} else if (this.matchParts.get(i).toString().equals("..")) {
-            				if (!lastWasWildCard) {
-            					if (!thisIsNode) {
-            						if (i == this.matchParts.size() - 1) {
-            							this.matchPart.append("<-[random" + this.randomIndex + "]");
-            							this.matchPart.append("-()");
-            							this.lastRandom = "random" + this.randomIndex;
-            							this.randomIndex++;
-            						} else {
-            							this.matchPart.append("<--");
-            							thisIsNode = true;
-            						}
-                					
-                				} else {
-                					if (i == this.matchParts.size() - 1) {
-                						this.matchPart.append("<-(random" + this.randomIndex + ")");
-                						this.lastRandom = "random" + this.randomIndex;
-                						this.randomIndex++;
-                						thisIsNode = false;
-                						
-                					} else {
-                						this.matchPart.append("()");
-                						thisIsNode = false;
-                					}
-                					
-                				}
-            				} else {
-            					if (!thisIsNode) {
-            						if (i == this.matchParts.size() - 1) {
-                						this.matchPart.append("<-[random" + this.randomIndex + "]");
-                						this.matchPart.append("-()");
-                						this.lastRandom = "random" + this.randomIndex;
-                						this.randomIndex++;
-                						thisIsNode = false;
-                						
-                					} else {
-                						this.matchPart.append("<--");
-                						thisIsNode = true;
-                					}
-                					
-            					} else {
-            						if (i == this.matchParts.size() - 1) {
-                						this.matchPart.append("(random" + this.randomIndex + ")");
-                						this.lastRandom = "random" + this.randomIndex;
-                						this.randomIndex++;
-                						thisIsNode = false;
-                						
-                					} else {
-                						this.matchPart.append("()");
-                						thisIsNode = false;
-                					}
-                					
-            					}
-            				}
-            				
-            				
-            				lastWasWildCard = true;
-            				
-            			//Muussa tapauksessa edetään "normaalisti"
-            			} else {
-                			
-                			//(/) = Joko - tai -> riippuen onko kaari tai solmu
-                			if (sb.toString().equals("/")) {
-                				if (lastWasWildCard) {
-                					if (thisIsNode) {
-                						this.matchPart.append("(" + this.matchParts.get(i) + ")");
-                						thisIsNode = false;
-                					} else {
-                						this.matchPart.append("-[" + this.matchParts.get(i) + "]");
-                						if (i == this.matchParts.size() - 1) {
-                							this.matchPart.append("->()");
-                						}
-                						thisIsNode = true;
-                					}
-                					
-                					lastWasWildCard = !lastWasWildCard;
-                					
-                				} else {
-                				    if (thisIsNode) {
-                					   this.matchPart.append("->");
-                					   this.matchPart.append("(" + this.matchParts.get(i) + ")");
-                					   thisIsNode = false;
-                				    } else {
-                					   this.matchPart.append("-");
-                					   this.matchPart.append("[" + this.matchParts.get(i) + "]");
-                					   thisIsNode = true;
-                				    }
-                				}
-                				
-                			//(//) = -[*]->
-                			} else if (sb.toString().equals("//")) {
-                				this.matchPart.append("-[*]->");
-                				this.matchPart.append("(" + this.matchParts.get(i) + ")");
-                				thisIsNode = true;
-                			}
-                			lastWasWildCard = false;
-            			}
-            			
-            			
-            			
-            			
-            		}
-            	}
-            	this.matchQueries.add(this.matchPart);
-            }
+    	if (this.isNode && this.attribute && !this.attributeOnly) {
+    		this.priorityQuery.append("()");
+    	} else if (!this.isNode && !this.attribute) {
+    		this.priorityQuery.append("()");
     	}
     }
 
     @Override
     public void enterStep(xpathParser.StepContext ctx) {
+    	
+    	int indexOfCurrentChildNode = ctx.getParent().children.indexOf(ctx);
+    	if (indexOfCurrentChildNode > 0) {
+    		if (ctx.parent.getChild(indexOfCurrentChildNode - 1).toString().equals("/")) {
+    			this.isNode = !this.isNode;
+    		} else if (ctx.parent.getChild(indexOfCurrentChildNode - 1).toString().equals("//")) {
+    			this.priorityQuery.append("-[*]->");
+    		}
+    		if (this.lastNodeInPath && !this.isNode) {
+    			
+    			this.priorityQuery.append(", (" + this.returnValue + ")");
+    		}
+    		
+    	}
     }
 
     @Override
@@ -563,101 +281,132 @@ public class MyListener extends xpathBaseListener {
 
     @Override
     public void exitAxisSpecifier(xpathParser.AxisSpecifierContext ctx) {
-
-        //Jos lapsi ei ole null, on havaittu @-merkki, jolloin elementti on attribuutti.
-    	if (ctx.getChild(0) != null) {
-    		this.attribute = true;
-            
+    	this.axis = "";
+    	StringBuilder sb = new StringBuilder();
+    	sb.append(ctx.getChild(0));
+    	if (sb.toString().equals("parent")) {
+    		this.axis = "parent";
+    		this.startEdge = "<-[";
+    		this.endEdge = "]-";
+    	} else if (sb.toString().equals("ancestor")) {
+    		this.startEdge = "<-[";
+    		this.endEdge = "*]-";
+    		this.axis = "ancestor";
+    	} else if (sb.toString().equals("child")) {
+    		this.startEdge = "-[";
+    		this.endEdge = "]->";
+    		this.axis = "child";
+    	} else if (sb.toString().equals("descendant")) {
+    		this.startEdge = "-[";
+    		this.endEdge = "*]->";
+    		this.axis = "descendant";
+    	} else if (sb.toString().equals("ancestor-or-self")) {
+    		this.startEdge = "<-[";
+    		this.endEdge = "*0..]-";
+    		this.axis = "ancestor-or-self";
+    	} else if (sb.toString().equals("descendant-or-self")) {
+    		this.startEdge = "-[";
+    		this.endEdge = "*0..]->";
+    		this.axis = "descendant-or-self";
+    	} else if (sb.toString().equals("attribute") || sb.toString().equals("@")) {
+    		this.axis = "attribute";
     	}
     }
 
     @Override
     public void exitEqualityExpr(xpathParser.EqualityExprContext ctx) {
+    	StringBuilder sb = new StringBuilder();
+    	sb.append(ctx.getChild(1));
         //Jos kyseessä on attribuutti, lisätään operaattori ja attribuutin arvo.
-        if (this.attribute && this.insidePredicate && !this.alreadyCompared) {
-            StringBuilder eq = new StringBuilder();
-            eq.append(ctx.getChild(1));
-            String equalOrInEqual = eq.toString();
-            if (equalOrInEqual.equals("=")) {
-                this.andSteps.add(this.conditionAppliesTo + "." + this.lastAttribute + " = " + this.predicateValue);
-            } else if (equalOrInEqual.equals("!=")) {
-            	this.andSteps.add(this.conditionAppliesTo + "." + this.lastAttribute + " <> " + this.predicateValue);
-            } else {
-            	this.andSteps.add("EXISTS(" + this.conditionAppliesTo + "." + this.lastAttribute + ")");
-            }
-        } else {
+    	if (ctx.getChildCount() > 1) {
+    	    if (sb.toString().equals("=")) {
+			    StringBuilder s = this.priorityQueries.pop();
+			    if (s.charAt(s.length() - 1) == ')') {
+				    if (s.charAt(s.length() - 2) == '}') {
+					    s.insert(s.length() - 2, ", " + this.attributeName + ":" + this.predicateValue);
+				    } else {
+					    s.insert(s.length() - 1, " {" + this.attributeName + ":" + this.predicateValue + "}");
+				    }
+			    } else if (s.charAt(s.length() - 1) == '>') {
+				    if (s.charAt(s.length() - 4) == '}') {
+					    s.insert(s.length() - 4, ", " + this.attributeName + ":" + this.predicateValue);
+				    } else {
+					    s.insert(s.length() - 3, " {" + this.attributeName + ":" + this.predicateValue + "}");
+				    }
+			    } else if (s.charAt(s.length() - 1) == '-') {
+				    if (s.charAt(s.length() - 3) == '}') {
+					    s.insert(s.length() - 3, ", " + this.attributeName + ":" + this.predicateValue);
+				    } else {
+					    s.insert(s.length() - 2, " {" + this.attributeName + ":" + this.predicateValue + "}");
+				    }  
+			    }
+			    this.priorityQueries.push(s);
+		    } else {
+                if (this.attribute && this.insidePredicate && ctx.getChildCount() == 1) {
+        	        if (this.whereQuery.length() > 0) {
+        		        this.whereQuery.append(" AND ");
+         	        }
         	
-        }
+        	        if (this.addPath) {
+        		        this.whereQuery.append("ALL(rel in relationships(" + this.paths.peek() + ") WHERE EXISTS(rel." + this.returnValue + "))");
+        	        } else {
+        		        if (!this.insidePredicateFunction) {
+        			        this.whereQuery.append("EXISTS(" + this.returnValue + ")");
+                	        this.attribute = false;
+        		        }	
+        	        }
+                } else if (this.attribute && this.insidePredicate && ctx.getChildCount() > 1) {
+        	        if (this.whereQuery.length() > 0) {
+        		        this.whereQuery.append(" AND ");
+        	        }
+        	        if (this.addPath) {
+        		        this.whereQuery.append("ALL(rel in relationships(" + this.paths.peek() + ") WHERE rel." + this.returnValue + "" + ctx.getChild(1) + "" + this.predicateValue + ")");	
+        	        } else {
+        		        this.whereQuery.append(this.returnValue + "" + ctx.getChild(1) + "" + this.predicateValue);
+            	        this.attribute = false;
+        	        }	
+                }
+		    }
+    	}
+        /*
+        if (this.insidePredicate) {
+        	this.returnValue = this.returnValues.peek();
+        }*/
+        
     }
 
     @Override
     public void exitRelationalExpr(xpathParser.RelationalExprContext ctx) {
         //Jos kyseessä on attribuutti, lisätään operaattori ja attribuutin arvo.
-    	if (this.attribute && this.insidePredicate) {
-            StringBuilder eq = new StringBuilder();
-            eq.append(ctx.getChild(1));
-            String equalOrInEqual = eq.toString();
-            if (equalOrInEqual.equals(">")) {
-                this.andSteps.add(this.conditionAppliesTo + "." + this.lastAttribute + " > " + this.predicateValue);
-                this.alreadyCompared = true;
-            } else if (equalOrInEqual.equals("<")) {
-            	this.andSteps.add(this.conditionAppliesTo + "." + this.lastAttribute + " < " + this.predicateValue);
-            	this.alreadyCompared = true;
-            }
-        } else {
-        	
+    	if (this.attribute && this.insidePredicate && ctx.getChildCount() > 1) {
+        	if (this.whereQuery.length() > 0) {
+        		this.whereQuery.append(" AND ");
+        	}
+        	this.whereQuery.append(this.returnValue + "" + ctx.getChild(1) + "" + this.predicateValue);
+        	this.attribute = false;
         }
     }
 
     @Override
     public void enterAndExpr(xpathParser.AndExprContext ctx) {
         //And-operaattorila on aina pariton määrä lapsia, joista parittomat luvut ovat "and"-operaattoreita
-        andSteps = new ArrayList();
     }
 
 
     @Override
     public void exitAndExpr(xpathParser.AndExprContext ctx) {
-        //And-operaattorila on aina pariton määrä lapsia, joista parittomat luvut ovat "and"-operaattoreita
-        if (this.andSteps.size() > 1) {
-            for (int i = 0; i < this.andSteps.size(); i++) {
-                if (i > 0) {
-                    andQuery.append(" AND ");
-                }
-                andQuery.append(this.andSteps.get(i));
-
-            }
-        } else if (this.andSteps.size() == 1) {
-            andQuery.append(this.andSteps.get(0));
-        }
-        this.andSteps.clear();
-        andParts.add(andQuery);
-        andQuery = new StringBuilder();
+        
     }
 
     @Override
     public void enterOrExpr(xpathParser.OrExprContext ctx) {
-        //And-operaattorila on aina pariton määrä lapsia, joista parittomat luvut ovat "and"-operaattoreita
-        orSteps = new ArrayList();
+        
     }
 
 
     @Override
     public void exitOrExpr(xpathParser.OrExprContext ctx) {
-        //And-operaattorila on aina pariton määrä lapsia, joista parittomat luvut ovat "and"-operaattoreita
-        if (this.andParts.size() > 1) {
-            for (int i = 0; i < this.andParts.size(); i++) {
-                if (i > 0) {
-                    wherePart.append(" OR ");
-                }
-                wherePart.append(this.andParts.get(i));
-
-            }
-        } else if (this.andParts.size() == 1) {
-            wherePart.append(this.andParts.get(0));
-        }
-        this.orSteps.clear();
-        this.andParts.clear();
+        
     }
 
 
@@ -675,72 +424,79 @@ public class MyListener extends xpathBaseListener {
 
     @Override
     public void exitNameTest(xpathParser.NameTestContext ctx) {
-    	System.out.println("hhhh");
     	
         StringBuilder g = new StringBuilder();
         g.append(ctx.getChild(0));
         if (g.toString().equals("*")) {
-        	System.out.println("hhhh");
-        	this.lastElement = "random" + this.randomIndex;
-        	if (this.insidePredicate) {
-        		this.predicateParts.add(g.toString());
-        		System.out.println("visited!");
+        	if (this.isNode) {
+        		this.priorityQuery.append("(a" + this.aliasIndex + ")");
         	} else {
-        		this.matchParts.add(g.toString());
+        		this.priorityQuery.append("-[a" + this.aliasIndex + "]->");
         	}
-
+        	this.returnValue = "a" + this.aliasIndex;
+        	this.aliasIndex++;
         }
         
     }
 
     @Override
     public void enterPredicate(xpathParser.PredicateContext ctx) {
-    	this.predicateElements.push(this.lastElement.toString());
-    	this.conditionAppliesTo = this.lastElement;
-        this.insidePredicate = true;
-        if (this.wherePart.length() > 0) {
-        	wherePart.append(" AND ");
-        }
-      //Jos paths on empty, oleteteaan että ollaan ylimmällä tasolla, eli predikaattien ulkopuolella
-    	if (this.paths.empty()) {
-        	this.paths.push(this.matchParts);
-        } else {
-        	this.paths.push(this.predicateParts); 
-            this.predicateParts = new ArrayList();
-        }
+    	if (this.axis.equals("ancestor") || this.axis.equals("descendant") || this.axis.equals("ancestor-or-self") || this.axis.equals("descendant-or-self")) {
+			this.addPath = true;
+			if (this.insidePredicate) {
+				this.priorityQuery.insert(2, "p" + this.pathIndex + "=");
+			} else {
+				this.priorityQuery.insert(0, "p" + this.pathIndex + "=");
+			}
+			this.paths.push("p" + this.pathIndex);
+			this.pathIndex++;
+		}
+    	this.isLastNodeInPathStack.push(this.lastNodeInPath);
+    	this.lastNodeInPath = false;
+    	this.appliesToStack.push(this.returnValue);
+    	this.isNodeStack.push(this.isNode);
+    	this.returnValues.push(this.returnValue);
+    	this.priorityQueries.push(this.priorityQuery);
+    	this.priorityQuery = new StringBuilder();
+    	
+    	//First step in predicate
+    	this.firstStep = true;
+    	this.isNode = false;
+    	this.appliesTo = this.returnValue;
+    	this.insidePredicate = true;
         	
     }
 
     @Override
     public void exitPredicate(xpathParser.PredicateContext ctx) {
-    	String h = this.predicateElements.pop();
+    	this.lastNodeInPath = this.isLastNodeInPathStack.pop();
+    	if (this.addPath) {
+    		this.lastNodeInPath = true;
+    	}
+    	this.addPath = false;
+    	this.priorityQuery = this.priorityQueries.pop().append(this.priorityQuery);
+    	this.isNode = this.isNodeStack.pop();
+    	this.returnValue = this.returnValues.pop();
+    	this.appliesTo = this.appliesToStack.pop();
     	
-    	if (this.predicateElements.empty()) {
+    	if (this.appliesToStack.size() == 0) {
     		this.insidePredicate = false;
+    		this.axis = "";
     	}
-    	if (this.insidePredicate) {
-    		this.predicateParts = this.paths.pop();
-    	} else {
-    		this.predicateParts = new ArrayList();
-    	}
-    	
-    	this.lastElement = h;
-    	this.alreadyCompared = false;
     }
 
     @Override
     public void exitAbbreviatedStep(xpathParser.AbbreviatedStepContext ctx) {
-    	System.out.println("here!!");
-    	StringBuilder sb = new StringBuilder();
-    	sb.append(ctx.getChild(0));
-    	System.out.println("mmm" + sb.toString());
-
-    	if (this.insidePredicate) {
-    		this.predicateParts.add("..");
-    	} else {
-    		this.matchParts.add("..");
-    	}
-    	
-    	this.lastElement = "random" + this.randomIndex;
+    	StringBuilder g = new StringBuilder();
+        g.append(ctx.getChild(0));
+        if (g.toString().equals("..")) {
+        	if (this.isNode) {
+        		this.priorityQuery.append("(a" + this.aliasIndex + ")");
+        	} else {
+        		this.priorityQuery.append("<-[a" + this.aliasIndex + "]-");
+        	}
+        	this.returnValue = "a" + this.aliasIndex;
+        	this.aliasIndex++;
+        }
     }
 }
