@@ -51,23 +51,31 @@ public class App
             ParseTree tree = parser.main();    // begin parsing at rule main
             
             System.out.println();
-            
-            /*
+            StringBuilder sb = new StringBuilder();
+            String cypQ = sb.append(mylistener.getQuery()).toString();
     		Driver driver = GraphDatabase.driver( "bolt://localhost:7687", AuthTokens.basic( "neo4j", "testi" ) );
         	Session session = driver.session();
         	StatementResult stre = session.run(cypQ);
         	List<Record> lr = stre.list();
-        	System.out.println(lr.size());
+        	System.out.println("Results of query");
+        	System.out.println("---");
         	Gson gson = new GsonBuilder().setPrettyPrinting().create();
+        	int withoutPrint = 0;
         	for (int i = 0; i < lr.size(); i++) {
-        		String json = gson.toJson(gson.toJson(lr.get(i).asMap()));
+        		if (i == 10) {
+        			withoutPrint = lr.size() - i;
+        			break;
+        		}
+        		String json = gson.toJson(lr.get(i).asMap());
         		System.out.println(json);
         	}
-        	  System.out.println(cypQ);
-        	System.out.println(lr.size());
+        	if (withoutPrint == 1) {
+        		System.out.println("(and " + withoutPrint + " more result)");
+        	} else if (withoutPrint > 1) {
+        		System.out.println("(and " + withoutPrint + " more results)");
+        	}
         	
         	driver.close();
-        	*/
     	} catch (IllegalArgumentException e) {
     		System.out.println(e);
     	} catch (Exception e) {
