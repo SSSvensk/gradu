@@ -30,7 +30,16 @@ public class App
 	public static void main( String[] args ) {
     	try {
     		String inputCmd = null;
-            if ( args.length>0 ) inputCmd = args[0];
+    		String databaseName = "";
+    		String databasePassword = "";
+            if ( args.length>2 ) {
+            	inputCmd = args[0];
+            	databaseName = args[1];
+            	databasePassword = args[2];
+            } else {
+            	throw new Exception("Parameters not given correctly!\nThere should be 3 string parameters:\n[XPath expression, db name, db password]");
+            }
+            System.out.println("Connecting to Neo4J database " + databaseName + "...");
             System.out.println("XPath query");
             System.out.println(inputCmd);
             // create a CharStream that reads from standard input
@@ -49,11 +58,11 @@ public class App
 
             parser.addParseListener(mylistener);
             ParseTree tree = parser.main();    // begin parsing at rule main
-            
+            /*
             System.out.println();
             StringBuilder sb = new StringBuilder();
             String cypQ = sb.append(mylistener.getQuery()).toString();
-    		Driver driver = GraphDatabase.driver( "bolt://localhost:7687", AuthTokens.basic( "neo4j", "testi" ) );
+    		Driver driver = GraphDatabase.driver( "bolt://localhost:7687", AuthTokens.basic( databaseName, databasePassword ) );
         	Session session = driver.session();
         	StatementResult stre = session.run(cypQ);
         	List<Record> lr = stre.list();
@@ -75,7 +84,7 @@ public class App
         		System.out.println("(and " + withoutPrint + " more results)");
         	}
         	
-        	driver.close();
+        	driver.close();*/
     	} catch (IllegalArgumentException e) {
     		System.out.println(e);
     	} catch (Exception e) {
