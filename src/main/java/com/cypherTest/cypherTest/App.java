@@ -67,7 +67,7 @@ public class App
         	StatementResult stre = session.run(cypQ);
         	List<Record> lr = stre.list();
         	System.out.println("Results of query");
-        	System.out.println("---");
+        	System.out.println();
         	Gson gson = new GsonBuilder().setPrettyPrinting().create();
         	int withoutPrint = 0;
         	for (int i = 0; i < lr.size(); i++) {

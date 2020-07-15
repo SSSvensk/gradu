@@ -6,8 +6,7 @@ import java.util.Queue;
 import java.util.Stack;
 
 //TODO
-//AND-hässinki polkujen kanssa
-//string functiot ilman kaksoislainausmerkkiä
+//AND
 
 public class MyListener extends xpathBaseListener {
 
@@ -25,6 +24,7 @@ public class MyListener extends xpathBaseListener {
     private boolean isNode = true;
     private boolean addPath = false;
     private int pathIndex = 0;
+    private String lastNode = "";
     
     private boolean firstStep = true;
     
@@ -34,7 +34,6 @@ public class MyListener extends xpathBaseListener {
     private Stack<String> functionNames = new Stack<String>();
     private Stack<Boolean> isNodeStack = new Stack<Boolean>();
     private Stack<Boolean> isLastNodeInPathStack = new Stack<Boolean>();
-    private Stack<Boolean> hasEdges = new Stack<Boolean>();
     
     private String previousAxis = "";
     private Stack<String> axisStack = new Stack<String>();
@@ -44,6 +43,7 @@ public class MyListener extends xpathBaseListener {
     private String endEdge;
     
     public StringBuilder priorityQuery = new StringBuilder();
+    public StringBuilder predicateQuery = new StringBuilder();
     public Stack<StringBuilder> priorityQueries = new Stack<StringBuilder>();
     public Queue<StringBuilder> transitivePaths = new LinkedList<StringBuilder>();
     public StringBuilder unwindQuery = new StringBuilder();
@@ -74,6 +74,8 @@ public class MyListener extends xpathBaseListener {
     public void exitMain(xpathParser.MainContext ctx) {
     	System.out.println("Cypher query");
     	System.out.println(this.query);
+    	System.out.println();
+    	System.out.println("Translation done, now querying from database...");
     }
     
     @Override
@@ -99,13 +101,15 @@ public class MyListener extends xpathBaseListener {
         		this.query.append(" UNION ");
         	}
         	this.query.append("MATCH ");
-        	System.out.println("okok");
+        	/*
         	while (this.transitivePaths.peek() != null) {
-        		System.out.println(this.transitivePaths.peek().toString());
+        		System.out.println("t path " + this.transitivePaths.peek().toString());
         		this.query.append(this.transitivePaths.poll().toString());
-        		
-        	}
+        	}*/
+        	
         	this.query.append(this.priorityQuery);
+        	this.query.append(this.predicateQuery);
+        	
         	if (this.unwindQuery.length() > 0) {
         		this.query.append(" UNWIND " + this.unwindQuery);
         	}
@@ -113,7 +117,6 @@ public class MyListener extends xpathBaseListener {
         		this.query.append(" WHERE " + this.whereQuery);
         	}
         	
-        	System.out.println(this.functionName);
         	if (this.functionName != null) {
         		this.query.append(" RETURN " + this.functionName + "(" + this.returnValue + ")");
         	} else {
@@ -124,7 +127,6 @@ public class MyListener extends xpathBaseListener {
         	this.priorityQuery = new StringBuilder();
         	this.unwindQuery = new StringBuilder();
         	this.whereQuery = new StringBuilder();
-        	
     	}  	
     	//
     	
@@ -141,7 +143,15 @@ public class MyListener extends xpathBaseListener {
     @Override
     public void exitFunctionCall(xpathParser.FunctionCallContext ctx) {
     	if (this.insidePredicate) {
-    		this.whereQuery.append(this.returnValue + " " + this.functionNames.pop() + " '" + this.functionValue + "'");
+    		if (this.whereQuery.length() > 0) {
+    			this.whereQuery.append(" AND ");
+    		}
+    		if (this.addPath) {
+    			this.whereQuery.append("ALL(rel in relationships(" + this.paths.peek() + ") WHERE rel " + this.functionNames.pop() + " '" + this.functionValue + "')");
+    		} else {
+    			this.whereQuery.append(this.returnValue + " " + this.functionNames.pop() + " '" + this.functionValue + "'");
+    		}
+    		
     		this.insidePredicateFunction = false;
     		
     		//Setting a new "dominant" function name from peek of name stack, if stack isn't empty
@@ -222,9 +232,8 @@ public class MyListener extends xpathBaseListener {
     		if (this.addPath) {
     			this.returnValue = ncName;
     		} else if (this.insidePredicate) {
-    			this.returnValue = this.appliesTo + "." + ncName;
+    			this.returnValue = this.appliesToStack.peek() + "." + ncName;
     		} else {
-
     			this.priorityQuery.append("(a"+ this.aliasIndex +")");
         		this.returnValue = "a" + this.aliasIndex + "." + ncName;
     		}
@@ -232,7 +241,7 @@ public class MyListener extends xpathBaseListener {
     		this.attributeOnly = true;
     		this.attribute = true;
     		this.attributeName = ncName;
-    	} else if(this.axis.equals("attribute")) {
+    	} else if (this.axis.equals("attribute")) {
     		this.attribute = true;
     		this.attributeName = ncName;
     		if (this.appliesToStack.size() > 0) {
@@ -244,8 +253,10 @@ public class MyListener extends xpathBaseListener {
     	} else if (this.isNode) {
     		this.priorityQuery.append("(a" + this.aliasIndex + ":" + ncName + ")");
     		this.returnValue = "a" + this.aliasIndex;
+    		this.lastNode = this.returnValue;
     		this.aliasIndex++;
     	} else if (!this.isNode && !this.insidePredicateFunction) {
+
     		this.returnValue = "a" + this.aliasIndex;
     		this.aliasIndex++;
 
@@ -281,12 +292,16 @@ public class MyListener extends xpathBaseListener {
     
     @Override
     public void enterRelativeLocationPath(xpathParser.RelativeLocationPathContext ctx) {
-    	
+    	this.firstStep = true;
     }
 
     @Override
     public void exitRelativeLocationPath(xpathParser.RelativeLocationPathContext ctx) {
-    	String pathVariable = "p" + this.pathIndex;
+    	
+    	String pathVariable = "";
+    	if (!this.paths.isEmpty()) {
+    		pathVariable = this.paths.peek();
+    	}
     	
     	if (this.isNode && this.attribute && !this.attributeOnly) {
     		this.priorityQuery.append("()");
@@ -294,7 +309,7 @@ public class MyListener extends xpathBaseListener {
     		this.priorityQuery.append("()");
     		if (this.axis.equals("descendant") || this.axis.equals("descendant-or-self") || this.axis.equals("ancestor") || this.axis.equals("ancestor-or-self")) {
     			this.returnValue = "relationships(" + pathVariable + ")";
-        	} 
+        	}
     	}
     	
     	boolean previousIsTransitive = false;
@@ -307,11 +322,25 @@ public class MyListener extends xpathBaseListener {
     		if (this.priorityQuery.charAt(0) != 'p') {
     			this.priorityQuery.insert(0, pathVariable + "=");
     		}
-
     		String newValue = "rel";
     		this.returnValue = newValue + "." + this.attributeName;
     		this.unwindQuery.append("relationships(" + pathVariable + ") AS " + newValue);
     	}
+    	if (this.insidePredicate && this.priorityQuery.toString().length() > 0) {
+    		//System.out.println("pq " + this.priorityQuery.toString());
+    		/*
+    		if (this.priorityQueries.size() > 1) {
+    			this.priorityQuery = this.priorityQueries.pop().append(this.priorityQuery);
+    		}
+    		System.out.println("pushed " + this.priorityQuery);
+    		
+    		this.priorityQueries.push(this.priorityQuery);
+    		System.out.println(this.priorityQueries);
+    		this.priorityQuery = new StringBuilder();*/
+    		
+    	}
+    	
+    	this.isNode = false;
     }
 
     @Override
@@ -322,16 +351,20 @@ public class MyListener extends xpathBaseListener {
     	
     	int indexOfCurrentChildNode = ctx.getParent().children.indexOf(ctx);
     	if (indexOfCurrentChildNode > 0) {
+    		
+    		//If preceding sibling was /
     		if (ctx.parent.getChild(indexOfCurrentChildNode - 1).toString().equals("/")) {
     			this.isNode = !this.isNode;
+    		//If preceding sibling was //
     		} else if (ctx.parent.getChild(indexOfCurrentChildNode - 1).toString().equals("//")) {
     			this.priorityQuery.append("-[*]->");
+    		} else {
+    			throw new IllegalArgumentException();
     		}
+    		
+    		//
     		if (this.lastNodeInPath && !this.isNode) {
-    			System.out.println("enter step");
-    			System.out.println(this.priorityQuery.toString());
     			this.priorityQuery.append(", ");
-    			this.transitivePaths.add(this.priorityQuery);
     			this.priorityQuery = new StringBuilder();
     			this.priorityQuery.append("(" + this.returnValue + ")");
     		}
@@ -429,15 +462,6 @@ public class MyListener extends xpathBaseListener {
         	        if (this.whereQuery.length() > 0) {
         		        this.whereQuery.append(" AND ");
          	        }
-        	
-        	        if (this.addPath) {
-        		        this.whereQuery.append("ALL(rel in relationships(" + this.paths.peek() + ") WHERE EXISTS(rel." + this.returnValue + "))");
-        	        } else {
-        		        if (!this.insidePredicateFunction) {
-        			        this.whereQuery.append("EXISTS(" + this.returnValue + ")");
-                	        this.attribute = false;
-        		        }	
-        	        }
                 } else if (this.attribute && this.insidePredicate && ctx.getChildCount() > 1) {
         	        if (this.whereQuery.length() > 0) {
         		        this.whereQuery.append(" AND ");
@@ -450,6 +474,18 @@ public class MyListener extends xpathBaseListener {
         	        }	
                 }
 		    }
+    	} else {
+    		if (this.attribute && !this.insidePredicateFunction) {
+    			if (this.whereQuery.length() > 0) {
+    		        this.whereQuery.append(" AND ");
+     	        }
+    			if (this.addPath) {
+    				this.whereQuery.append("ALL(rel in relationships(" + this.paths.peek() + ") WHERE EXISTS(rel." + this.returnValue + "))");
+    			} else {
+    				this.whereQuery.append("EXISTS(" + this.returnValue + ")");
+    			}
+    		
+    		}
     	}
         /*
         if (this.insidePredicate) {
@@ -498,20 +534,7 @@ public class MyListener extends xpathBaseListener {
 			    }
 			    this.priorityQueries.push(s);
 		    } else {
-                if (this.attribute && this.insidePredicate && ctx.getChildCount() == 1) {
-        	        if (this.whereQuery.length() > 0) {
-        		        this.whereQuery.append(" AND ");
-         	        }
-        	
-        	        if (this.addPath) {
-        		        this.whereQuery.append("ALL(rel in relationships(" + this.paths.peek() + ") WHERE EXISTS(rel." + this.returnValue + "))");
-        	        } else {
-        		        if (!this.insidePredicateFunction) {
-        			        this.whereQuery.append("EXISTS(" + this.returnValue + ")");
-                	        this.attribute = false;
-        		        }	
-        	        }
-                } else if (this.attribute && this.insidePredicate && ctx.getChildCount() > 1) {
+                if (this.attribute && this.insidePredicate && ctx.getChildCount() > 1) {
         	        if (this.whereQuery.length() > 0) {
         		        this.whereQuery.append(" AND ");
         	        }
@@ -523,18 +546,22 @@ public class MyListener extends xpathBaseListener {
         	        }	
                 }
 		    }
+    	    this.attribute = false;
     	}
     }
 
     @Override
     public void enterAndExpr(xpathParser.AndExprContext ctx) {
-        //And-operaattorila on aina pariton määrä lapsia, joista parittomat luvut ovat "and"-operaattoreita
     }
 
 
     @Override
     public void exitAndExpr(xpathParser.AndExprContext ctx) {
-        
+        if (ctx.getChildCount() > 1) {
+        	System.out.println("moi");
+        	System.out.println(this.priorityQueries);
+        	//this.priorityQueries.pop();
+        }
     }
 
     @Override
@@ -580,16 +607,41 @@ public class MyListener extends xpathBaseListener {
 
     @Override
     public void enterPredicate(xpathParser.PredicateContext ctx) {
-    	if (this.axis.equals("ancestor") || this.axis.equals("descendant") || this.axis.equals("ancestor-or-self") || this.axis.equals("descendant-or-self")) {
+    	
+    	//If predicate is bound to edge step, and the axis is transitive...
+    	if (!this.isNode && (this.axis.equals("ancestor") || this.axis.equals("descendant") || this.axis.equals("ancestor-or-self") || this.axis.equals("descendant-or-self"))) {
 			this.addPath = true;
 			this.axisStack.push(this.axis);
 			this.axis = "";
+			
+			String firstString = "";
+			
+			//If the query contains already edges attached to nodes, we have to split the query to fit
+			//the path index to right place.
+			//Only if the path isn't split before
+			if (!this.priorityQuery.toString().contains(",") && (this.priorityQuery.toString().contains(")<") && this.priorityQuery.toString().contains("-(")) || (this.priorityQuery.toString().contains(">(")) || (this.priorityQuery.toString().contains(")-"))) {
+				System.out.println("moi");
+				System.out.println(this.priorityQuery);
+			
+				int a = this.priorityQuery.toString().lastIndexOf(")");
+				firstString = this.priorityQuery.toString().substring(0, a + 1) + ", ";
+				StringBuilder laterString = new StringBuilder();
+				laterString.append("(" + this.lastNode + ")");
+				laterString
+						.append(this.priorityQuery.toString().substring(a + 1, this.priorityQuery.toString().length()));
+				this.priorityQuery = laterString;
+			}
+			
 			String pathId = "p" + this.pathIndex;
+			
 			if (this.insidePredicate) {
 				this.priorityQuery.insert(2, pathId + "=");
 			} else {
 				this.priorityQuery.insert(0, pathId + "=");
 			}
+			
+			this.priorityQuery.insert(0, firstString);
+			
 			this.paths.push(pathId);
 			this.pathIndex++;
 		} else {
@@ -620,13 +672,18 @@ public class MyListener extends xpathBaseListener {
     	}
     	this.axis = this.axisStack.pop();
     	this.addPath = false;
-    	this.priorityQuery = this.priorityQueries.pop().append(this.priorityQuery);
+    	System.out.println("exit pred");
+    	
+    	this.predicateQuery.insert(0, this.priorityQuery);
+    	this.priorityQuery = this.priorityQueries.pop();
+
     	this.isNode = this.isNodeStack.pop();
     	this.returnValue = this.returnValues.pop();
     	this.appliesTo = this.appliesToStack.pop();
+    	this.lastNode = this.appliesTo.toString();
     	this.attributeOnly = false;
     	if (!this.paths.isEmpty()) {
-    		this.paths.pop();
+    		//this.paths.pop();
     	}
     	
     	if (this.appliesToStack.size() == 0) {
