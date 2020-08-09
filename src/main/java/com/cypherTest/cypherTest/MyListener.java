@@ -25,6 +25,7 @@ public class MyListener extends xpathBaseListener {
     private boolean addPath = false;
     private int pathIndex = 0;
     private String lastNode = "";
+    private Output output = new Output();
     
     private boolean firstStep = true;
     
@@ -118,7 +119,12 @@ public class MyListener extends xpathBaseListener {
         	}
         	
         	if (this.functionName != null) {
-        		this.query.append(" RETURN " + this.functionName + "(" + this.returnValue + ")");
+        		if (this.functionName.equals("substring")) {
+        			this.query.append(" RETURN " + this.functionName + "(" + this.returnValue + ", " + this.predicateValue + ")");
+        		} else {
+        			this.query.append(" RETURN " + this.functionName + "(" + this.returnValue + ")");
+        		}
+        		
         	} else {
         		this.query.append(" RETURN " + this.returnValue);
         	}
@@ -162,7 +168,16 @@ public class MyListener extends xpathBaseListener {
     		}
     		
     	} else {
-    		this.returnValue = this.functionName + "(" + this.returnValue + ")";
+    		if (this.functionName.equals("substring")) {
+    			this.returnValue = this.functionName + "(" + this.returnValue + ", " + this.predicateValue + ")";
+    			String a = this.query.toString().replaceFirst("null", this.predicateValue.toString());
+    			this.query = new StringBuilder();
+    			this.query.append(a);
+    			
+    		} else {
+    			this.returnValue = this.functionName + "(" + this.returnValue + ")";
+    		}
+    		
         	this.functionNames.pop();
     	}
     	
@@ -184,7 +199,9 @@ public class MyListener extends xpathBaseListener {
         			cypherFunctionName = "STARTS WITH";
         		} else if (sb.toString().equals("ends-with")) {
         			cypherFunctionName = "ENDS WITH";
-        		} else {
+        		} else if (sb.toString().equals("not")) {
+        			throw new IllegalArgumentException("Function NOT has not been implemented (yet). So try not to use it :)");
+        		}else {
         			throw new IllegalArgumentException("String function name is invalid!");
         		}
     			this.insidePredicateFunction = true;
@@ -199,16 +216,18 @@ public class MyListener extends xpathBaseListener {
     			    cypherFunctionName = "sum";
     		    } else if (sb.toString().equals("count")) {
     			    cypherFunctionName = "count";
-    		    } else if (sb.toString().equals("ceil")) {
+    		    } else if (sb.toString().equals("ceiling")) {
     			    cypherFunctionName = "ceil";
     		    } else if (sb.toString().equals("floor")) {
     			    cypherFunctionName = "floor";
     		    } else if (sb.toString().equals("round")) {
     			    cypherFunctionName = "round";
+    		    } else if (sb.toString().equals("substring")) {
+    		    	cypherFunctionName = "substring";
     		    } else if (sb.toString().equals("not")) {
-    			    cypherFunctionName = "not";
-    		    } else {
-    			   throw new IllegalArgumentException("Aggregate function name is invalid!");
+    		    	throw new IllegalArgumentException("Function NOT has not been implemented (yet). So try not to use it :)");
+    		    }  else {
+    			    throw new IllegalArgumentException("Aggregate function name is invalid!");
     		    }
     		}
     		this.functionName = cypherFunctionName;
@@ -255,6 +274,15 @@ public class MyListener extends xpathBaseListener {
     		this.returnValue = "a" + this.aliasIndex;
     		this.lastNode = this.returnValue;
     		this.aliasIndex++;
+    		
+    		if (!(Character.isUpperCase(ncName.charAt(0)) && ncName.substring(1,  ncName.length() - 1).equals(ncName.substring(1,  ncName.length() - 1).toLowerCase()))) {
+    			String warnMessage = "In Neo4J nodes are usually named with capital letter followed by lower case letters.";
+    			String details = ncName;
+    			output.printWarning(warnMessage, details);
+    		}
+    		if (this.insidePredicateFunction) {
+    			System.out.println("moi");
+    		}
     	} else if (!this.isNode && !this.insidePredicateFunction) {
 
     		this.returnValue = "a" + this.aliasIndex;
@@ -262,10 +290,8 @@ public class MyListener extends xpathBaseListener {
 
     		if (this.priorityQueries.size() > 0 && this.firstStep) {
     			if (this.addPath) {
-    				System.out.println("exit if");
     				this.priorityQuery.append("(" + this.appliesToStack.peek() + ")");
     			} else {
-    				System.out.println("exit else");
     				this.priorityQuery.append(", (" + this.appliesToStack.peek() + ")");
     			}
     			
@@ -284,8 +310,25 @@ public class MyListener extends xpathBaseListener {
     			this.priorityQuery.append("-[" + this.returnValue + ":" + ncName + "]->");
     		}
     		
+    		if (!ncName.equals(ncName.toUpperCase())) {
+    			String warnMessage = "In Neo4J relations are usually named with uppercase letters.";
+    			String details = ncName;
+    			output.printWarning(warnMessage, details);
+    		}
+    		
     	} else if (this.insidePredicateFunction) {
+    		if (this.firstStep && !this.returnValue.contains(".")) {
+    			throw new IllegalArgumentException("First argument of string function must be an attribute");
+    		}
+    		
     		this.functionValue = ncName;
+    	}
+    	if (this.insidePredicate) {
+    		
+    		if (!this.isNodeStack.peek() && !this.attribute) {
+    			throw new IllegalArgumentException("Translator doesn't accept paths bound to edge.");
+    		}
+    		
     	}
     	this.firstStep = false;
     }
@@ -380,7 +423,11 @@ public class MyListener extends xpathBaseListener {
 
     @Override
     public void exitPrimaryExpr(xpathParser.PrimaryExprContext ctx) {
-    	this.predicateValue = ctx.getChild(0);
+    	//Checking if the child node is leaf node
+    	if (ctx.getChild(0).getChild(0) == null) {
+    		this.predicateValue = ctx.getChild(0);
+    	}
+    	
     }
 
     @Override
@@ -388,6 +435,7 @@ public class MyListener extends xpathBaseListener {
     	//Giving a new axis name
     	StringBuilder sb = new StringBuilder();
     	sb.append(ctx.getChild(0));
+
     	if (sb.toString().equals("parent")) {
     		this.axis = "parent";
     		this.startEdge = "<-[";
@@ -414,14 +462,24 @@ public class MyListener extends xpathBaseListener {
     		this.axis = "descendant-or-self";
     	} else if (sb.toString().equals("attribute") || sb.toString().equals("@")) {
     		this.axis = "attribute";
-    	} else {
+    	} else if (sb.toString() == null || !sb.toString().isEmpty()) {
     		this.startEdge = "-[";
     		this.endEdge = "]->";
     		this.axis = "child";
+    	} else {
+    		throw new IllegalArgumentException("Unknown axis " + sb.toString());
     	}
     	
     	if (sb.length() > 0) {
     		this.axisNames.add(this.axis);
+    	}
+    	
+    }
+    
+    @Override
+    public void enterEqualityExpr(xpathParser.EqualityExprContext ctx) {
+    	if (this.insidePredicate) {
+    		this.attribute = false;
     	}
     	
     }
@@ -439,21 +497,21 @@ public class MyListener extends xpathBaseListener {
 			    StringBuilder s = this.priorityQueries.pop();
 			    if (s.charAt(s.length() - 1) == ')') {
 				    if (s.charAt(s.length() - 2) == '}') {
-					    s.insert(s.length() - 2, ", " + this.attributeName + ":" + this.predicateValue);
+					    s.insert(s.length() - 2, ", " + this.attributeName + ": " + this.predicateValue);
 				    } else {
-					    s.insert(s.length() - 1, " {" + this.attributeName + ":" + this.predicateValue + "}");
+					    s.insert(s.length() - 1, " {" + this.attributeName + ": " + this.predicateValue + "}");
 				    }
 			    } else if (s.charAt(s.length() - 1) == '>') {
 				    if (s.charAt(s.length() - 4) == '}') {
-					    s.insert(s.length() - 4, ", " + this.attributeName + ":" + this.predicateValue);
+					    s.insert(s.length() - 4, ", " + this.attributeName + ": " + this.predicateValue);
 				    } else {
-					    s.insert(s.length() - 3, " {" + this.attributeName + ":" + this.predicateValue + "}");
+					    s.insert(s.length() - 3, " {" + this.attributeName + ": " + this.predicateValue + "}");
 				    }
 			    } else if (s.charAt(s.length() - 1) == '-') {
 				    if (s.charAt(s.length() - 3) == '}') {
-					    s.insert(s.length() - 3, ", " + this.attributeName + ":" + this.predicateValue);
+					    s.insert(s.length() - 3, ", " + this.attributeName + ": " + this.predicateValue);
 				    } else {
-					    s.insert(s.length() - 2, " {" + this.attributeName + ":" + this.predicateValue + "}");
+					    s.insert(s.length() - 2, " {" + this.attributeName + ": " + this.predicateValue + "}");
 				    }  
 			    }
 			    this.priorityQueries.push(s);
@@ -558,8 +616,6 @@ public class MyListener extends xpathBaseListener {
     @Override
     public void exitAndExpr(xpathParser.AndExprContext ctx) {
         if (ctx.getChildCount() > 1) {
-        	System.out.println("moi");
-        	System.out.println(this.priorityQueries);
         	//this.priorityQueries.pop();
         }
     }
@@ -572,7 +628,9 @@ public class MyListener extends xpathBaseListener {
 
     @Override
     public void exitOrExpr(xpathParser.OrExprContext ctx) {
-        
+        if (ctx.getChildCount() > 1) {
+        	output.printWarning("WARN: Logical operator OR hasn't been implemented. This query might behave unexpectedly.");
+        }
     }
 
 
@@ -620,8 +678,6 @@ public class MyListener extends xpathBaseListener {
 			//the path index to right place.
 			//Only if the path isn't split before
 			if (!this.priorityQuery.toString().contains(",") && (this.priorityQuery.toString().contains(")<") && this.priorityQuery.toString().contains("-(")) || (this.priorityQuery.toString().contains(">(")) || (this.priorityQuery.toString().contains(")-"))) {
-				System.out.println("moi");
-				System.out.println(this.priorityQuery);
 			
 				int a = this.priorityQuery.toString().lastIndexOf(")");
 				firstString = this.priorityQuery.toString().substring(0, a + 1) + ", ";
@@ -672,7 +728,6 @@ public class MyListener extends xpathBaseListener {
     	}
     	this.axis = this.axisStack.pop();
     	this.addPath = false;
-    	System.out.println("exit pred");
     	
     	this.predicateQuery.insert(0, this.priorityQuery);
     	this.priorityQuery = this.priorityQueries.pop();

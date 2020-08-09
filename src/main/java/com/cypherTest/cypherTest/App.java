@@ -39,9 +39,11 @@ public class App
             } else {
             	throw new Exception("Parameters not given correctly!\nThere should be 3 string parameters:\n[XPath expression, db name, db password]");
             }
-            System.out.println("Connecting to Neo4J database " + databaseName + "...");
+            
             System.out.println("XPath query");
             System.out.println(inputCmd);
+            System.out.println();
+            System.out.println("Messages from Xypher translator:");
             // create a CharStream that reads from standard input
             ANTLRInputStream input = new ANTLRInputStream(inputCmd);
 
@@ -58,7 +60,8 @@ public class App
 
             parser.addParseListener(mylistener);
             ParseTree tree = parser.main();    // begin parsing at rule main
-            /*
+            System.out.println("Connecting to Neo4J database " + databaseName + "...");
+            
             System.out.println();
             StringBuilder sb = new StringBuilder();
             String cypQ = sb.append(mylistener.getQuery()).toString();
@@ -84,9 +87,10 @@ public class App
         		System.out.println("(and " + withoutPrint + " more results)");
         	}
         	
-        	driver.close();*/
+        	driver.close();
     	} catch (IllegalArgumentException e) {
     		System.out.println(e);
+    		System.out.println("Translation process interrupted");
     	} catch (Exception e) {
     		System.out.println("virhe!");
     		System.out.println(e);
