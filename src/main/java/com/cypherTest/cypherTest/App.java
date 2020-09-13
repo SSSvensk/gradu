@@ -29,13 +29,17 @@ public class App
     @SuppressWarnings("deprecation")
 	public static void main( String[] args ) {
     	try {
-    		String inputCmd = null;
+    		String inputCmd = "";
     		String databaseName = "";
     		String databasePassword = "";
+    		String databaseAddress = "bolt://localhost:7687";
             if ( args.length>2 ) {
             	inputCmd = args[0];
             	databaseName = args[1];
             	databasePassword = args[2];
+            	if (args.length > 3) {
+            		databaseAddress = args[3];
+            	}
             } else {
             	throw new Exception("Parameters not given correctly!\nThere should be 3 string parameters:\n[XPath expression, db name, db password]");
             }
@@ -65,7 +69,7 @@ public class App
             System.out.println();
             StringBuilder sb = new StringBuilder();
             String cypQ = sb.append(mylistener.getQuery()).toString();
-    		Driver driver = GraphDatabase.driver( "bolt://localhost:7687", AuthTokens.basic( databaseName, databasePassword ) );
+    		Driver driver = GraphDatabase.driver( databaseAddress, AuthTokens.basic( databaseName, databasePassword ) );
         	Session session = driver.session();
         	StatementResult stre = session.run(cypQ);
         	List<Record> lr = stre.list();
