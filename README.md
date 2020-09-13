@@ -7,7 +7,7 @@ Steps:
 
 2. mvn compile
 
-3. mvn exec:java -Dexec.mainClass=com.cypherTest.cypherTest.App -Dexec.args="[XPATH_QUERY NEO4J_DB_NAME NEO4J_DB_PASSWORD]".
+3. mvn exec:java -Dexec.mainClass=com.cypherTest.cypherTest.App -Dexec.args="[XPATH_QUERY NEO4J_DB_NAME NEO4J_DB_PASSWORD (optional: NEO4J_DB_ADDRESS)]".
 
 Examples of command nr 3:
 
